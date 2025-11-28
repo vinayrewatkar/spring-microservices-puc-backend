@@ -7,6 +7,10 @@ import com.puc.userService.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
 public class UserProfileService {
@@ -37,5 +41,21 @@ public class UserProfileService {
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();
+    }
+
+    public Optional<UserDto> getUserById(String id) {
+        return userRepository.findById(id)
+                .map(this::toDto);
+    }
+
+    public Optional<UserDto> getUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .map(this::toDto);
+    }
+
+    public List<UserDto> getAllUsers() {
+        return userRepository.findAll().stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
     }
 }

@@ -1,5 +1,6 @@
 package com.puc.modelApiService.controller;
 
+import com.puc.modelApiService.dto.VehicleDetailsDto;
 import com.puc.modelApiService.service.ImageProcessingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -16,16 +17,15 @@ public class ImageProcessingController {
 
     private final ImageProcessingService imageProcessingService;
 
-    @PostMapping(value = "/crop-image", produces = MediaType.IMAGE_JPEG_VALUE)
-    public ResponseEntity<byte[]> cropImage(@RequestParam("image") MultipartFile image) {
+    @PostMapping(value = "/crop-and-verify", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<VehicleDetailsDto> cropAndVerify(@RequestParam("image") MultipartFile image) {
         try {
-            byte[] croppedImage = imageProcessingService.cropImage(image);
-            return ResponseEntity.ok()
-                    .contentType(MediaType.IMAGE_JPEG)
-                    .body(croppedImage);
+            VehicleDetailsDto vehicleDetails = imageProcessingService.cropAndVerify(image);
+            return ResponseEntity.ok(vehicleDetails);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }
+
 
