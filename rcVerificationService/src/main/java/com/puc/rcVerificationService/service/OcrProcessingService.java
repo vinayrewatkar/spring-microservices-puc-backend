@@ -5,14 +5,20 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,33 +38,44 @@ public class OcrProcessingService {
 
     private final RestTemplate restTemplate;
 
-    /**
-     * Debug helper: call OCR API using only url field (like docs curl).
-     */
-    public void debugWithUrlOnly() {
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("url", "https://storage.googleapis.com/api4ai-static/samples/ocr-1.png");
+    public void debugWithLocalImage() {
+        try {
+            Path path = Path.of("E:/BACKEND_puc/temp/MyVehicleImg.jpg");
+            byte[] buffer = Files.readAllBytes(path);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-RapidAPI-Key", ocrApiKey);
-        headers.set("X-RapidAPI-Host", ocrApiHost);
+            HttpHeaders partHeaders = new HttpHeaders();
+            partHeaders.setContentType(MediaType.IMAGE_JPEG);
 
-        HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+            HttpEntity<byte[]> part = new HttpEntity<>(buffer, partHeaders);
 
-        ResponseEntity<String> resp = restTemplate.exchange(
-                ocrApiUrl,
-                HttpMethod.POST,
-                request,
-                String.class
-        );
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("image", part); // key MUST be "image"
 
-        log.info("DEBUG URL ONLY - status: {}", resp.getStatusCode());
-        log.info("DEBUG URL ONLY - body  : {}", resp.getBody());
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-RapidAPI-Key", ocrApiKey);
+            headers.set("X-RapidAPI-Host", ocrApiHost);
+            // DO NOT set Content-Type
+
+            HttpEntity<MultiValueMap<String, Object>> request =
+                    new HttpEntity<>(body, headers);
+
+            ResponseEntity<String> resp = restTemplate.exchange(
+                    ocrApiUrl,
+                    HttpMethod.POST,
+                    request,
+                    String.class
+            );
+
+            log.info("DEBUG BYTE[] IMAGE status: {}", resp.getStatusCode());
+            log.info("DEBUG BYTE[] IMAGE body  : {}", resp.getBody());
+
+        } catch (Exception e) {
+            log.error("DEBUG BYTE[] IMAGE failed: {}", e.getMessage(), e);
+        }
     }
 
-    /**
-     * Main method: send image bytes as multipart "image" and extract texts.
-     */
+
+
     public List<String> processOcr(List<FileData> extractedFiles) {
         if (ocrApiUrl == null || ocrApiKey == null || ocrApiHost == null) {
             throw new RuntimeException("OCR API config missing");
@@ -66,42 +83,52 @@ public class OcrProcessingService {
 
         List<String> imageProcessedData = new ArrayList<>();
 
-        for (FileData file : extractedFiles) {
-            String filename = file.getFilename();
-            byte[] buffer = file.getBuffer();
+        for (FileData fileData : extractedFiles) {
+            String originalFilename = fileData.getFilename();
+            byte[] buffer = fileData.getBuffer();
 
-            if (filename == null || buffer == null) {
+            if (originalFilename == null || buffer == null) {
                 log.error("Invalid file format: Missing filename or buffer");
                 continue;
             }
 
-            log.info("Processing OCR for file: {} (size {} bytes)", filename, buffer.length);
-
+            File tempFile = null;
             try {
-                // 1) Build multipart body.
+                // 1. Create Temp File (Node.js equivalent of handling file stream)
+                Path tempPath = Files.createTempFile("ocr_upload_", "_" + originalFilename);
+                tempFile = tempPath.toFile();
+                try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+                    fos.write(buffer);
+                }
+
+                log.info("Processing OCR for file: {} (size {} bytes)", originalFilename, buffer.length);
+
+                // 2. Prepare Resource
+                Resource fileResource = new FileSystemResource(tempFile);
+
+                // 3. Prepare Part Headers (Node.js: formData.append('image', buffer, { contentType: mimeType }))
+                HttpHeaders partHeaders = new HttpHeaders();
+                partHeaders.setContentType(MediaType.IMAGE_JPEG); // Or dynamically guess based on filename
+
+                // 4. Create Entity for the File Part
+                HttpEntity<Resource> fileEntity = new HttpEntity<>(fileResource, partHeaders);
+
+                // 5. Build Body
                 MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+                body.add("image", fileEntity);
 
-                Resource fileResource = new ByteArrayResource(buffer) {
-                    @Override
-                    public String getFilename() {
-                        // must be non-null; Postman sends file with its name
-                        return filename;
-                    }
-                };
+                // 6. Main Request Headers (Node.js: ...headers)
+                HttpHeaders requestHeaders = new HttpHeaders();
+                requestHeaders.set("X-RapidAPI-Key", ocrApiKey);
+                requestHeaders.set("X-RapidAPI-Host", ocrApiHost);
 
-                // field name MUST be "image" to match OCR API spec.
-                body.add("image", fileResource);
-
-                // 2) Headers: only RapidAPI ones.
-                HttpHeaders headers = new HttpHeaders();
-                headers.set("X-RapidAPI-Key", ocrApiKey);
-                headers.set("X-RapidAPI-Host", ocrApiHost);
-                // DO NOT set Content-Type; RestTemplate will set multipart/form-data with boundary.
+                // CRITICAL: DO NOT set "Content-Type" here.
+                // RestTemplate acts like Node's FormData and sets 'multipart/form-data; boundary=...' automatically.
 
                 HttpEntity<MultiValueMap<String, Object>> requestEntity =
-                        new HttpEntity<>(body, headers);
+                        new HttpEntity<>(body, requestHeaders);
 
-                // 3) Execute request.
+                // 7. Execute Request
                 ResponseEntity<JsonNode> response = restTemplate.exchange(
                         ocrApiUrl,
                         HttpMethod.POST,
@@ -109,38 +136,51 @@ public class OcrProcessingService {
                         JsonNode.class
                 );
 
-                log.info("OCR API status: {}", response.getStatusCode());
-                log.debug("OCR API body  : {}", response.getBody());
-
-                if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                    log.error("OCR failed. Status: {}, body: {}",
-                            response.getStatusCode(), response.getBody());
-                    continue;
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    extractTextFromResponse(response.getBody(), imageProcessedData, originalFilename);
+                } else {
+                    log.error("OCR failed for {}. Status: {}", originalFilename, response.getStatusCode());
                 }
 
-                // 4) Parse JSON like in your JS.
-                JsonNode root = response.getBody().get("results");
-                if (root != null && root.isArray()) {
-                    for (JsonNode resultNode : root) {
-                        JsonNode entitiesNode = resultNode.get("entities");
-                        if (entitiesNode != null && entitiesNode.isArray()) {
-                            for (JsonNode entity : entitiesNode) {
-                                JsonNode objectsNode = entity.get("objects");
-                                if (objectsNode != null && objectsNode.isArray()) {
-                                    for (JsonNode objNode : objectsNode) {
-                                        JsonNode subEntities = objNode.get("entities");
-                                        if (subEntities != null && subEntities.isArray()) {
-                                            for (JsonNode subEntity : subEntities) {
-                                                JsonNode kindNode = subEntity.get("kind");
-                                                JsonNode textNode = subEntity.get("text");
-                                                if (kindNode != null
-                                                        && "text".equals(kindNode.asText())
-                                                        && textNode != null
-                                                        && !textNode.isNull()) {
-                                                    String extractedText = textNode.asText();
-                                                    log.info("Extracted text: {}", extractedText);
-                                                    imageProcessedData.add(extractedText);
-                                                }
+            } catch (HttpClientErrorException e) {
+                log.error("OCR API Error for file {}: {} - Body: {}",
+                        originalFilename, e.getStatusCode(), e.getResponseBodyAsString());
+            } catch (Exception ex) {
+                log.error("Unexpected error in OCR for file {}: {}", originalFilename, ex.getMessage(), ex);
+            } finally {
+                // Clean up
+                if (tempFile != null && tempFile.exists()) {
+                    try { Files.delete(tempFile.toPath()); } catch (IOException ignored) {}
+                }
+            }
+        }
+
+        if (imageProcessedData.isEmpty()) {
+            log.warn("No text was successfully extracted from any of the images.");
+        }
+
+        return imageProcessedData;
+    }
+
+    private void extractTextFromResponse(JsonNode root, List<String> data, String filename) {
+        // Same parsing logic as before...
+        JsonNode results = root.get("results");
+        if (results != null && results.isArray()) {
+            for (JsonNode resultNode : results) {
+                JsonNode entities = resultNode.get("entities");
+                if (entities != null && entities.isArray()) {
+                    for (JsonNode entity : entities) {
+                        JsonNode objects = entity.get("objects");
+                        if (objects != null && objects.isArray()) {
+                            for (JsonNode obj : objects) {
+                                JsonNode subEntities = obj.get("entities");
+                                if (subEntities != null && subEntities.isArray()) {
+                                    for (JsonNode sub : subEntities) {
+                                        if (sub.has("text") && sub.get("text").isTextual()) {
+                                            String text = sub.get("text").asText();
+                                            if (text != null && !text.isBlank()) {
+                                                log.info("Found text: {}", text);
+                                                data.add(text);
                                             }
                                         }
                                     }
@@ -148,21 +188,8 @@ public class OcrProcessingService {
                             }
                         }
                     }
-                } else {
-                    log.warn("No 'results' array found in OCR response for file {}", filename);
                 }
-
-            } catch (Exception ex) {
-                log.error("Error in OCR processing for file {}: {}", filename, ex.getMessage(), ex);
             }
         }
-
-        if (imageProcessedData.isEmpty()) {
-            log.warn("No text was successfully extracted from any of the images.");
-        } else {
-            log.info("Successfully extracted {} text elements", imageProcessedData.size());
-        }
-
-        return imageProcessedData;
     }
 }

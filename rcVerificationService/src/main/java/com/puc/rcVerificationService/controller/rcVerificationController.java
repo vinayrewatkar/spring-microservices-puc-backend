@@ -31,7 +31,7 @@ public class rcVerificationController {
      */
     @PostMapping(value = "/verify", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<VehicleDetailsDto> verifyVehicle(
-            @RequestParam("images") List<MultipartFile> files) {
+            @RequestParam("image") List<MultipartFile> files) {
 
         try {
             // Convert MultipartFile to FileData expected by service
