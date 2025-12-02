@@ -15,12 +15,6 @@ public class UserController {
 
     private final UserProfileService userProfileService;
 
-    @PostMapping("/register")
-    public ResponseEntity<UserDto> registerUser(@RequestBody UserDto userDto) {
-        UserDto registeredUser = userProfileService.registerUser(userDto);
-        return ResponseEntity.status(201).body(registeredUser);
-    }
-
     @GetMapping("/{id}")
     public ResponseEntity<UserDto> getUserById(@PathVariable String id) {
         return userProfileService.getUserById(id)
