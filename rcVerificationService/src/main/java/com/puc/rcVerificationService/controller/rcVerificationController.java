@@ -2,6 +2,7 @@ package com.puc.rcVerificationService.controller;
 
 import com.puc.rcVerificationService.service.ImageProcessingService;
 import com.puc.rcVerificationService.dto.VehicleDetailsDto;
+import com.puc.rcVerificationService.service.RcVerificationService;
 import com.puc.rcVerificationService.utils.FileData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,9 @@ import java.util.stream.Collectors;
 public class rcVerificationController {
 
     private final ImageProcessingService imageProcessingService;
+
+    private final RcVerificationService rcVerificationService;
+
 
     /**
      * Endpoint to upload images for vehicle verification.
@@ -53,4 +57,18 @@ public class rcVerificationController {
             return ResponseEntity.status(500).build();
         }
     }
+
+    @PostMapping("/rc-verify")
+    public ResponseEntity<VehicleDetailsDto> verifyRcNumber(
+            @RequestParam("rcNumber") String rcNumber) {
+
+        try {
+            VehicleDetailsDto vehicleDetails = rcVerificationService.performPucValidation(rcNumber);
+            return ResponseEntity.ok(vehicleDetails);
+        } catch (Exception e) {
+            log.error("Error verifying RC number {}: {}", rcNumber, e.getMessage(), e);
+            return ResponseEntity.status(500).build();
+        }
+    }
+
 }
