@@ -12,6 +12,9 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import java.io.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,7 +32,7 @@ public class ImageProcessingService {
     public byte[] cropImage(MultipartFile image) throws IOException {
         // existing cropping logic using restTemplate
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("image", new MultipartInputStreamFileResource(
+        body.add("file", new MultipartInputStreamFileResource(
                 image.getInputStream(), image.getOriginalFilename()));
 
         HttpHeaders headers = new HttpHeaders();
@@ -37,16 +40,18 @@ public class ImageProcessingService {
 
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
+        log.info("making model request");
         ResponseEntity<byte[]> response = restTemplate.exchange(
-                "http://3.109.124.158:5000/predict",
+                "http://localhost:5000/predict",
                 HttpMethod.POST,
                 requestEntity,
                 byte[].class
         );
 
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-            log.info("Successfully cropped image, size: {} bytes", response.getBody().length);
-            return response.getBody();
+            byte[] zipBytes = response.getBody();
+            byte[] croppedJpgBytes = extractFirstJpg(zipBytes);
+            return croppedJpgBytes;
         } else {
             String errorMsg = "Failed to call model API: " + response.getStatusCode();
             log.error(errorMsg);
@@ -60,7 +65,7 @@ public class ImageProcessingService {
 
         // 2) Wrap cropped bytes into MultipartFile
         MultipartFile croppedMultipartFile = new MockMultipartFile(
-                "images",               // parameter name expected by rcVerificationService
+                "file",               // parameter name expected by rcVerificationService
                 "cropped_" + image.getOriginalFilename(),
                 MediaType.IMAGE_JPEG_VALUE.toString(),
                 croppedBytes);
@@ -86,5 +91,18 @@ public class ImageProcessingService {
         public long contentLength() throws IOException {
             return -1;
         }
+    }
+    private byte[] extractFirstJpg(byte[] zipBytes) throws IOException {
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (!entry.isDirectory() && entry.getName().toLowerCase().endsWith(".jpg")) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    zis.transferTo(baos);
+                    return baos.toByteArray();
+                }
+            }
+        }
+        throw new IllegalStateException("No .jpg found in zip response");
     }
 }

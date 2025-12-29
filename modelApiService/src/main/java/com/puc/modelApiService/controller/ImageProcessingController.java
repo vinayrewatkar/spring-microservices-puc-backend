@@ -4,6 +4,7 @@ import com.puc.modelApiService.dto.VehicleDetailsDto;
 import com.puc.modelApiService.service.ImageProcessingService;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
+
 public class ImageProcessingController {
 
     private final ImageProcessingService imageProcessingService;
@@ -47,6 +49,7 @@ public class ImageProcessingController {
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(fallbackDto);
     }
+
 }
 
 

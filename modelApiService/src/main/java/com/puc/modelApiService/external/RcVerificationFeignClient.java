@@ -13,6 +13,6 @@ import java.util.List;
 public interface RcVerificationFeignClient {
 
     @PostMapping(value = "/api/vehicle/verify", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    VehicleDetailsDto verifyVehicle(@RequestPart("images") List<MultipartFile> images);
+    VehicleDetailsDto verifyVehicle(@RequestPart("file") List<MultipartFile> images);
 }
 

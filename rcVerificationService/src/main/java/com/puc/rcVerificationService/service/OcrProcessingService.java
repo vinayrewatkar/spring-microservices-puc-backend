@@ -106,35 +106,24 @@ public class OcrProcessingService {
                 // 2. Prepare Resource
                 Resource fileResource = new FileSystemResource(tempFile);
 
-                // 3. Prepare Part Headers (Node.js: formData.append('image', buffer, { contentType: mimeType }))
-                HttpHeaders partHeaders = new HttpHeaders();
-                partHeaders.setContentType(MediaType.IMAGE_JPEG); // Or dynamically guess based on filename
-
-                // 4. Create Entity for the File Part
-                HttpEntity<Resource> fileEntity = new HttpEntity<>(fileResource, partHeaders);
-
-                // 5. Build Body
                 MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-                body.add("image", fileEntity);
+                body.add("image", fileResource);   // <-- key must be "image"
 
-                // 6. Main Request Headers (Node.js: ...headers)
                 HttpHeaders requestHeaders = new HttpHeaders();
                 requestHeaders.set("X-RapidAPI-Key", ocrApiKey);
                 requestHeaders.set("X-RapidAPI-Host", ocrApiHost);
-
-                // CRITICAL: DO NOT set "Content-Type" here.
-                // RestTemplate acts like Node's FormData and sets 'multipart/form-data; boundary=...' automatically.
+// DO NOT set Content-Type (RestTemplate will set multipart/form-data with boundary)
 
                 HttpEntity<MultiValueMap<String, Object>> requestEntity =
                         new HttpEntity<>(body, requestHeaders);
 
-                // 7. Execute Request
                 ResponseEntity<JsonNode> response = restTemplate.exchange(
                         ocrApiUrl,
                         HttpMethod.POST,
                         requestEntity,
                         JsonNode.class
                 );
+
 
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                     extractTextFromResponse(response.getBody(), imageProcessedData, originalFilename);
