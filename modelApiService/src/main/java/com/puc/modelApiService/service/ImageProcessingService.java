@@ -1,7 +1,10 @@
 package com.puc.modelApiService.service;
 
+import com.puc.modelApiService.dto.ProgressEvent;
 import com.puc.modelApiService.dto.VehicleDetailsDto;
 import com.puc.modelApiService.external.RcVerificationFeignClient;
+import com.puc.modelApiService.kafka.ProgressPublisher;
+import com.puc.modelApiService.utils.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
@@ -13,6 +16,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.*;
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -28,6 +32,10 @@ public class ImageProcessingService {
     private final RestTemplate restTemplate;
 
     private final RcVerificationFeignClient rcVerificationFeignClient;
+
+    private final ProgressPublisher progressPublisher;
+
+    private final JwtUtil jwtUtil;
 
     public byte[] cropImage(MultipartFile image) throws IOException {
         // existing cropping logic using restTemplate
@@ -59,20 +67,37 @@ public class ImageProcessingService {
         }
     }
 
-    public VehicleDetailsDto cropAndVerify(MultipartFile image) throws IOException {
-        // 1) Crop the image
-        byte[] croppedBytes = cropImage(image);
+    public VehicleDetailsDto cropAndVerify(MultipartFile image, String token) throws IOException {
+        String jobId = UUID.randomUUID().toString();
+        String username = jwtUtil.extractUsername(token); // you must have JwtUtil in this service
 
-        // 2) Wrap cropped bytes into MultipartFile
+        progressPublisher.publish(event(jobId, username, "MODEL_PIPELINE_STARTED", "STARTED", "Started", 0));
+
+        // 1) Crop
+        progressPublisher.publish(event(jobId, username, "MODEL_CROP_STARTED", "STARTED", "Cropping", 10));
+        byte[] croppedBytes = cropImage(image);
+        progressPublisher.publish(event(jobId, username, "MODEL_CROP_DONE", "DONE", "Crop done", 40));
+
+        // 2) Call rcVerification (Feign)
         MultipartFile croppedMultipartFile = new MockMultipartFile(
-                "file",               // parameter name expected by rcVerificationService
+                "file",
                 "cropped_" + image.getOriginalFilename(),
                 MediaType.IMAGE_JPEG_VALUE.toString(),
-                croppedBytes);
+                croppedBytes
+        );
 
-        // 3) Call rcVerificationService via Feign client with cropped image wrapped in a list
-        return rcVerificationFeignClient.verifyVehicle(List.of(croppedMultipartFile));
+        progressPublisher.publish(event(jobId, username, "RC_VERIFY_STARTED", "STARTED", "Calling RC verification", 50));
+        VehicleDetailsDto dto = rcVerificationFeignClient.verifyVehicle(
+                jobId,
+                username,
+                List.of(croppedMultipartFile)
+        );
+        progressPublisher.publish(event(jobId, username, "RC_VERIFY_DONE", "DONE", "RC verification finished", 90));
+
+        progressPublisher.publish(event(jobId, username, "MODEL_PIPELINE_DONE", "DONE", "Completed", 100));
+        return dto;
     }
+
 
     private static class MultipartInputStreamFileResource extends InputStreamResource {
         private final String filename;
@@ -105,4 +130,17 @@ public class ImageProcessingService {
         }
         throw new IllegalStateException("No .jpg found in zip response");
     }
+    private ProgressEvent event(String jobId, String userId, String step, String status, String msg, Integer progress) {
+        return ProgressEvent.builder()
+                .jobId(jobId)
+                .userId(userId)
+                .service("modelApiService")
+                .step(step)
+                .status(status)
+                .message(msg)
+                .progress(progress)
+                .ts(System.currentTimeMillis())
+                .build();
+    }
+
 }

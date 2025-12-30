@@ -9,9 +9,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 @RestController
 @RequiredArgsConstructor
@@ -22,14 +25,15 @@ public class ImageProcessingController {
 
     @PostMapping(value = "/crop-and-verify", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @CircuitBreaker(name = "rcModelBreaker", fallbackMethod = "rcModelFallBack")
-    public ResponseEntity<VehicleDetailsDto> cropAndVerify(@RequestParam("image") MultipartFile image) {
-        try {
-            VehicleDetailsDto vehicleDetails = imageProcessingService.cropAndVerify(image);
-            return ResponseEntity.ok(vehicleDetails);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+    public ResponseEntity<VehicleDetailsDto> cropAndVerify(
+            @RequestHeader("Authorization") String authorization,
+            @RequestParam("image") MultipartFile image) throws IOException {
+
+        String token = authorization.startsWith("Bearer ") ? authorization.substring(7) : authorization;
+
+        return ResponseEntity.ok(imageProcessingService.cropAndVerify(image, token));
     }
+
 
     public ResponseEntity<VehicleDetailsDto> rcModelFallBack(@RequestParam("image") MultipartFile image,
                                                              Throwable ex) {

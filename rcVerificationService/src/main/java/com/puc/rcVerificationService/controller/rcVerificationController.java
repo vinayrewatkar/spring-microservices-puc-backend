@@ -35,10 +35,11 @@ public class rcVerificationController {
      */
     @PostMapping(value = "/verify", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<VehicleDetailsDto> verifyVehicle(
+            @RequestHeader("X-Job-Id") String jobId,
+            @RequestHeader("X-User-Id") String userId,
             @RequestParam("file") List<MultipartFile> files) {
 
         try {
-            // Convert MultipartFile to FileData expected by service
             List<FileData> fileDataList = files.stream().map(file -> {
                 try {
                     return new FileData(file.getOriginalFilename(), file.getBytes());
@@ -47,8 +48,7 @@ public class rcVerificationController {
                 }
             }).collect(Collectors.toList());
 
-            // Call the service
-            VehicleDetailsDto vehicleDetails = imageProcessingService.verifyVehicle(fileDataList);
+            VehicleDetailsDto vehicleDetails = imageProcessingService.verifyVehicle(fileDataList, jobId, userId);
 
             return ResponseEntity.ok(vehicleDetails);
 

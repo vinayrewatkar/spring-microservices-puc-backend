@@ -19,7 +19,7 @@
         <module name="serviceRegistry" />
         <module name="configServer" />
       </profile>
-      <profile name="Annotation profile for regionService" enabled="true">
+      <profile name="Annotation profile for rcVerificationService" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
@@ -30,8 +30,12 @@
         <module name="apiGateway" />
         <module name="rcVerificationService" />
         <module name="regionService" />
+        <module name="realTimeUpdateService" />
       </profile>
     </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="realtimeUpdatesService" target="21" />
+    </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
@@ -39,6 +43,8 @@
       <module name="configServer" options="-parameters" />
       <module name="modelApiService" options="-parameters" />
       <module name="rcVerificationService" options="-parameters" />
+      <module name="realTimeUpdateService" options="-parameters" />
+      <module name="realtimeUpdatesService" options="-parameters" />
       <module name="regionService" options="-parameters" />
       <module name="serviceRegistry" options="-parameters" />
       <module name="userService" options="-parameters" />

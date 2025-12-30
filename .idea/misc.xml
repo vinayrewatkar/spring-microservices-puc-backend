@@ -11,6 +11,8 @@
         <option value="$PROJECT_DIR$/serviceRegistry/pom.xml" />
         <option value="$PROJECT_DIR$/rcVerificationService/pom.xml" />
         <option value="$PROJECT_DIR$/regionService/pom.xml" />
+        <option value="$PROJECT_DIR$/realtimeUpdatesService/pom.xml" />
+        <option value="$PROJECT_DIR$/realTimeUpdateService/pom.xml" />
       </list>
     </option>
   </component>
